@@ -1,177 +1,117 @@
 """
-main.py
-FastAPI service for the Gift Recommendation System.
+FastAPI application for the Customer Churn Prediction System.
 
-Loads the artifact produced by Semple_Modeling_and_Evaluation.ipynb
-(gift_recommender.joblib: pipeline + KMeans + item embeddings + catalog)
-and exposes endpoints to get recommendations and similar items.
+Exposes a REST API so the model can be called over HTTP from anywhere
+(a web form, another service, curl, Postman, etc.).
 
-Run with:
+Run locally:
     uvicorn main:app --reload
-"""
-from typing import List, Literal
 
-import numpy as np
-import pandas as pd
-import joblib
+Then visit http://127.0.0.1:8000/docs for interactive Swagger UI.
+
+Requires the artifacts produced by the training notebook to be present
+in the same directory:
+    - final_churn_model.h5
+    - preprocessor.pkl
+"""
+
 from fastapi import FastAPI, HTTPException
 from pydantic import BaseModel, Field
+import pandas as pd
+import joblib
+import tensorflow as tf
+import os
 
-ARTIFACT_PATH = "gift_recommender.joblib"
+app = FastAPI(
+    title="Customer Churn Prediction API",
+    description="Predicts whether a telecom customer will churn based on account and service attributes.",
+    version="1.0.0",
+)
 
-artifact = joblib.load(ARTIFACT_PATH)
-pipeline = artifact["pipeline"]
-kmeans = artifact["kmeans"]
-X = artifact["embeddings"]
-df = artifact["catalog"]
+MODEL_PATH = "final_churn_model.h5"
+PREPROCESSOR_PATH = "preprocessor.pkl"
 
-INTEREST_FLAGS = [c for c in df.columns if c.startswith("int_")]
-OCCASION_FLAGS = [c for c in df.columns if c.startswith("occ_")]
-INTERESTS = [c.replace("int_", "") for c in INTEREST_FLAGS]
-OCCASIONS = [c.replace("occ_", "") for c in OCCASION_FLAGS]
-
-AGE_BUCKETS = [
-    ("age_baby", 0, 3),
-    ("age_child", 4, 12),
-    ("age_teen", 13, 17),
-    ("age_youngadult", 18, 29),
-    ("age_adult", 30, 49),
-    ("age_senior", 50, 99),
-]
-AGE_BUCKET_COLS = [b[0] for b in AGE_BUCKETS]
-
-PRICE_EDGES = [100, 300, 700, 1500]
-PRICE_BAND_COLS = [f"band_{i}" for i in range(5)]
-
-GENDER_COLS = ["serves_female", "serves_male"]
-CATEGORICAL_COLS = ["category", "gift_type"]
-
-ALL_FEATURE_COLS = (INTEREST_FLAGS + OCCASION_FLAGS + AGE_BUCKET_COLS
-                     + GENDER_COLS + PRICE_BAND_COLS + CATEGORICAL_COLS)
+model = None
+preprocessor = None
 
 
-# ---------------------------------------------------------------------------
-# Feature engineering (same logic as the notebook, so a query lands in the
-# same vector space as the catalog)
-# ---------------------------------------------------------------------------
-def price_band_vector(price, neighbour_weight=0.5):
-    idx = int(np.searchsorted(PRICE_EDGES, price, side="right"))
-    v = np.zeros(5, dtype=np.float32)
-    v[idx] = 1.0
-    if idx - 1 >= 0:
-        v[idx - 1] = neighbour_weight
-    if idx + 1 < 5:
-        v[idx + 1] = neighbour_weight
-    return v
+class CustomerData(BaseModel):
+    gender: str = Field(..., example="Female")
+    SeniorCitizen: int = Field(..., example=0, description="0 = No, 1 = Yes")
+    Partner: str = Field(..., example="Yes")
+    Dependents: str = Field(..., example="No")
+    tenure: int = Field(..., example=2, description="Months with the company")
+    PhoneService: str = Field(..., example="Yes")
+    MultipleLines: str = Field(..., example="No")
+    InternetService: str = Field(..., example="Fiber optic")
+    OnlineSecurity: str = Field(..., example="No")
+    OnlineBackup: str = Field(..., example="No")
+    DeviceProtection: str = Field(..., example="No")
+    TechSupport: str = Field(..., example="No")
+    StreamingTV: str = Field(..., example="Yes")
+    StreamingMovies: str = Field(..., example="Yes")
+    Contract: str = Field(..., example="Month-to-month")
+    PaperlessBilling: str = Field(..., example="Yes")
+    PaymentMethod: str = Field(..., example="Electronic check")
+    MonthlyCharges: float = Field(..., example=85.70)
+    TotalCharges: float = Field(..., example=171.40)
 
 
-def build_query_profile(age, gender, occasion, budget, interests):
-    row = {c: 0.0 for c in ALL_FEATURE_COLS if c not in CATEGORICAL_COLS}
-
-    for it in interests:
-        key = f"int_{it}"
-        if key in row:
-            row[key] = 1.0
-
-    okey = f"occ_{occasion}"
-    if okey in row:
-        row[okey] = 1.0
-
-    for name, b_lo, b_hi in AGE_BUCKETS:
-        if b_lo <= age <= b_hi:
-            row[name] = 1.0
-            break
-
-    if gender == "Female":
-        row["serves_female"] = 1.0
-    elif gender == "Male":
-        row["serves_male"] = 1.0
-    else:
-        row["serves_female"] = row["serves_male"] = 1.0
-
-    row.update(dict(zip(PRICE_BAND_COLS, price_band_vector(budget))))
-
-    q = pd.DataFrame([row])
-    q["category"], q["gift_type"] = "__UNKNOWN__", "__UNKNOWN__"
-    return q[ALL_FEATURE_COLS]
+class PredictionResponse(BaseModel):
+    churn_probability: float
+    churn_prediction: int
+    risk_label: str
 
 
-def apply_hard_filters(data, age, gender, occasion, budget, tolerance=0.10):
-    ceiling = budget * (1 + tolerance)
-    mask = (data.min_age <= age) & (data.max_age >= age) & (data.price_min <= ceiling)
-    if gender in ("Female", "Male"):
-        mask &= data.gender_target.isin([gender, "Unisex"])
-    okey = f"occ_{occasion}"
-    if okey in data.columns:
-        mask &= data[okey].astype(bool)
-    return mask.to_numpy()
+@app.on_event("startup")
+def load_artifacts():
+    """Load the model and preprocessor once, when the server starts."""
+    global model, preprocessor
+
+    if not os.path.exists(MODEL_PATH) or not os.path.exists(PREPROCESSOR_PATH):
+        print(
+            f"WARNING: '{MODEL_PATH}' or '{PREPROCESSOR_PATH}' not found. "
+            "Run the training notebook first and place both files next to main.py."
+        )
+        return
+
+    model = tf.keras.models.load_model(MODEL_PATH)
+    preprocessor = joblib.load(PREPROCESSOR_PATH)
+    print("Model and preprocessor loaded successfully.")
 
 
-def recommend(age, gender, occasion, budget, interests, top_k=5):
-    q_vec = pipeline.transform(build_query_profile(age, gender, occasion, budget, interests))
-    mask = apply_hard_filters(df, age, gender, occasion, budget)
-    candidates = np.flatnonzero(mask)
-
-    if len(candidates) == 0:
-        return pd.DataFrame(columns=["parent_id", "product_name", "brand",
-                                      "category", "price_median", "similarity"])
-
-    sims = X[candidates] @ q_vec.ravel()
-    order = np.argsort(-sims)[:top_k]
-    top = candidates[order]
-
-    result = df.loc[top, ["parent_id", "product_name", "brand",
-                          "category", "price_median"]].copy()
-    result["similarity"] = np.round(sims[order], 3)
-    return result.reset_index(drop=True)
+@app.get("/")
+def root():
+    return {
+        "message": "Customer Churn Prediction API is running.",
+        "docs": "/docs",
+        "health": "/health",
+    }
 
 
-# ---------------------------------------------------------------------------
-# FastAPI app
-# ---------------------------------------------------------------------------
-app = FastAPI(title="Gift Recommender", version="1.0.0")
+@app.get("/health")
+def health_check():
+    ready = model is not None and preprocessor is not None
+    return {"status": "ok" if ready else "model_not_loaded", "model_ready": ready}
 
 
-class GiftRequest(BaseModel):
-    age: int = Field(..., ge=0, le=99)
-    gender: Literal["Female", "Male", "Any"]
-    occasion: str
-    budget: float = Field(..., gt=0)
-    interests: List[str] = []
-    top_k: int = Field(5, ge=1, le=50)
+@app.post("/predict", response_model=PredictionResponse)
+def predict(customer: CustomerData):
+    if model is None or preprocessor is None:
+        raise HTTPException(
+            status_code=503,
+            detail="Model is not loaded. Ensure final_churn_model.h5 and preprocessor.pkl are present.",
+        )
 
+    df_customer = pd.DataFrame([customer.dict()])
+    processed = preprocessor.transform(df_customer)
 
-@app.get("/options")
-def options():
-    """Powers UI dropdowns: valid interests / occasions / genders."""
-    return {"interests": INTERESTS, "occasions": OCCASIONS,
-            "genders": ["Female", "Male", "Any"]}
+    prob = float(model.predict(processed, verbose=0)[0][0])
+    pred = int(prob > 0.5)
+    label = "High Risk (Likely to Churn)" if pred == 1 else "Low Risk (Likely to Stay)"
 
-
-@app.post("/recommend")
-def get_recommendations(req: GiftRequest):
-    if req.occasion not in OCCASIONS:
-        raise HTTPException(422, f"occasion must be one of {OCCASIONS}")
-
-    recs = recommend(
-        age=req.age, gender=req.gender, occasion=req.occasion,
-        budget=req.budget, interests=req.interests, top_k=req.top_k,
+    return PredictionResponse(
+        churn_probability=round(prob, 4),
+        churn_prediction=pred,
+        risk_label=label,
     )
-    return {"recommendations": recs.to_dict(orient="records")}
-
-
-@app.get("/similar/{parent_id}")
-def similar_items(parent_id: str, top_k: int = 5):
-    """Item-to-item 'more like this' via cosine similarity on the embeddings."""
-    pos = np.flatnonzero(df.parent_id.to_numpy() == parent_id)
-    if len(pos) == 0:
-        raise HTTPException(404, "parent_id not found")
-    pos = int(pos[0])
-
-    sims = X @ X[pos]
-    sims[pos] = -1.0
-    order = np.argsort(-sims)[:top_k]
-
-    result = df.iloc[order][["parent_id", "product_name", "category", "price_median"]].copy()
-    result["similarity"] = np.round(sims[order], 3)
-    return result.to_dict(orient="records")
