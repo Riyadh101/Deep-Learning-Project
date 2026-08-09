@@ -1,0 +1,651 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Churn Risk Console</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;700&family=Inter:wght@400;500;600&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #0F1720;
+    --panel: #16212C;
+    --panel-line: #24323F;
+    --paper: #E7ECF1;
+    --fog: #8493A3;
+    --safe: #2DD4BF;
+    --watch: #F5A524;
+    --alert: #F04438;
+    --radius: 10px;
+  }
+
+  * { box-sizing: border-box; }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    background: var(--ink);
+    color: var(--paper);
+    font-family: 'Inter', sans-serif;
+    min-height: 100vh;
+  }
+
+  body {
+    background-image:
+      radial-gradient(circle at 85% -10%, rgba(45, 212, 191, 0.08), transparent 45%),
+      radial-gradient(circle at -5% 110%, rgba(240, 68, 56, 0.06), transparent 45%);
+  }
+
+  .wrap {
+    max-width: 1120px;
+    margin: 0 auto;
+    padding: 28px 24px 64px;
+  }
+
+  /* ---------- Header ---------- */
+  header {
+    display: flex;
+    align-items: baseline;
+    justify-content: space-between;
+    padding-bottom: 20px;
+    margin-bottom: 28px;
+    border-bottom: 1px solid var(--panel-line);
+  }
+
+  .brand {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+  }
+
+  .brand .dot {
+    width: 9px;
+    height: 9px;
+    border-radius: 50%;
+    background: var(--safe);
+    display: inline-block;
+    box-shadow: 0 0 10px rgba(45, 212, 191, 0.8);
+    position: relative;
+    top: -2px;
+  }
+
+  h1 {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 22px;
+    letter-spacing: 0.01em;
+    margin: 0;
+  }
+
+  .tagline {
+    font-size: 13px;
+    color: var(--fog);
+    margin-top: 2px;
+    font-family: 'Inter', sans-serif;
+  }
+
+  .srv-tag {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--fog);
+    text-align: right;
+    line-height: 1.6;
+  }
+
+  .srv-tag .live {
+    color: var(--safe);
+  }
+
+  /* ---------- Layout ---------- */
+  .console {
+    display: grid;
+    grid-template-columns: 1.15fr 0.85fr;
+    gap: 20px;
+    align-items: start;
+  }
+
+  @media (max-width: 880px) {
+    .console { grid-template-columns: 1fr; }
+  }
+
+  .panel {
+    background: var(--panel);
+    border: 1px solid var(--panel-line);
+    border-radius: var(--radius);
+  }
+
+  /* ---------- Form ---------- */
+  .form-panel { padding: 22px 24px 26px; }
+
+  .section + .section {
+    margin-top: 22px;
+    padding-top: 22px;
+    border-top: 1px dashed var(--panel-line);
+  }
+
+  .eyebrow {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--fog);
+    margin: 0 0 12px;
+  }
+
+  .grid-2 {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 12px 14px;
+  }
+
+  .grid-3 {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 12px 14px;
+  }
+
+  @media (max-width: 520px) {
+    .grid-2, .grid-3 { grid-template-columns: 1fr; }
+  }
+
+  .field label {
+    display: block;
+    font-size: 11.5px;
+    color: var(--fog);
+    margin-bottom: 5px;
+    font-weight: 500;
+  }
+
+  .field select,
+  .field input {
+    width: 100%;
+    background: #0F1720;
+    border: 1px solid var(--panel-line);
+    color: var(--paper);
+    border-radius: 7px;
+    padding: 9px 10px;
+    font-family: 'Inter', sans-serif;
+    font-size: 13.5px;
+    outline: none;
+    transition: border-color 0.15s ease;
+    appearance: none;
+  }
+
+  .field select {
+    background-image: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' width='10' height='6'><path d='M0 0l5 6 5-6z' fill='%238493A3'/></svg>");
+    background-repeat: no-repeat;
+    background-position: right 11px center;
+    padding-right: 28px;
+  }
+
+  .field select:focus,
+  .field input:focus {
+    border-color: var(--safe);
+  }
+
+  .field input[type="number"]::-webkit-inner-spin-button {
+    opacity: 0.5;
+  }
+
+  .actions {
+    margin-top: 24px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+  }
+
+  #assessBtn {
+    background: var(--safe);
+    color: #06201C;
+    border: none;
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 14.5px;
+    padding: 12px 22px;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: transform 0.12s ease, box-shadow 0.12s ease;
+    letter-spacing: 0.01em;
+  }
+
+  #assessBtn:hover { box-shadow: 0 0 0 3px rgba(45, 212, 191, 0.18); }
+  #assessBtn:active { transform: translateY(1px); }
+  #assessBtn:disabled {
+    background: var(--panel-line);
+    color: var(--fog);
+    cursor: default;
+    box-shadow: none;
+  }
+
+  .status-line {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 12px;
+    color: var(--fog);
+  }
+
+  .status-line.err { color: var(--alert); }
+
+  /* ---------- Meter panel ---------- */
+  .meter-panel {
+    padding: 24px 22px 22px;
+    position: sticky;
+    top: 20px;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+
+  .meter-panel .eyebrow { align-self: flex-start; }
+
+  .gauge-wrap {
+    position: relative;
+    width: 100%;
+    max-width: 280px;
+    margin-top: 6px;
+  }
+
+  svg.gauge { width: 100%; height: auto; display: block; }
+
+  .gauge-track { fill: none; stroke: var(--panel-line); stroke-width: 14; stroke-linecap: round; }
+
+  .gauge-fill {
+    fill: none;
+    stroke-width: 14;
+    stroke-linecap: round;
+    stroke: var(--fog);
+    transition: stroke-dashoffset 0.9s cubic-bezier(.4,0,.2,1), stroke 0.6s ease;
+  }
+
+  .tick {
+    stroke: var(--panel-line);
+    stroke-width: 2;
+  }
+
+  .gauge-readout {
+    position: absolute;
+    left: 0; right: 0;
+    top: 58%;
+    text-align: center;
+  }
+
+  .readout-num {
+    font-family: 'Space Grotesk', sans-serif;
+    font-weight: 700;
+    font-size: 40px;
+    line-height: 1;
+    color: var(--fog);
+    transition: color 0.5s ease;
+  }
+
+  .readout-label {
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    letter-spacing: 0.1em;
+    text-transform: uppercase;
+    color: var(--fog);
+    margin-top: 6px;
+    transition: color 0.5s ease;
+  }
+
+  .recommend {
+    margin-top: 18px;
+    width: 100%;
+    background: #0F1720;
+    border: 1px solid var(--panel-line);
+    border-radius: 8px;
+    padding: 13px 14px;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--fog);
+    min-height: 52px;
+  }
+
+  .recommend strong { color: var(--paper); }
+
+  .legend {
+    display: flex;
+    gap: 14px;
+    margin-top: 16px;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 10.5px;
+    color: var(--fog);
+  }
+
+  .legend span { display: inline-flex; align-items: center; gap: 5px; }
+  .legend i { width: 8px; height: 8px; border-radius: 50%; display: inline-block; }
+
+  footer {
+    margin-top: 36px;
+    text-align: center;
+    font-family: 'IBM Plex Mono', monospace;
+    font-size: 11px;
+    color: var(--fog);
+  }
+
+  footer a { color: var(--fog); }
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header>
+    <div class="brand">
+      <span class="dot"></span>
+      <div>
+        <h1>Churn Risk Console</h1>
+        <div class="tagline">Read a customer's churn risk before you hang up.</div>
+      </div>
+    </div>
+    <div class="srv-tag">
+      model &middot; <span class="live">final_churn_model.h5</span><br>
+      served via FastAPI
+    </div>
+  </header>
+
+  <div class="console">
+
+    <!-- FORM -->
+    <form class="panel form-panel" id="churnForm">
+
+      <div class="section">
+        <p class="eyebrow">Profile</p>
+        <div class="grid-3">
+          <div class="field">
+            <label for="gender">Gender</label>
+            <select id="gender" required>
+              <option value="Female">Female</option>
+              <option value="Male">Male</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="SeniorCitizen">Senior citizen</label>
+            <select id="SeniorCitizen" required>
+              <option value="0">No</option>
+              <option value="1">Yes</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="Partner">Partner</label>
+            <select id="Partner" required>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="Dependents">Dependents</label>
+            <select id="Dependents" required>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="eyebrow">Account</p>
+        <div class="grid-3">
+          <div class="field">
+            <label for="tenure">Tenure (months)</label>
+            <input type="number" id="tenure" min="0" value="2" required>
+          </div>
+          <div class="field">
+            <label for="Contract">Contract</label>
+            <select id="Contract" required>
+              <option value="Month-to-month">Month-to-month</option>
+              <option value="One year">One year</option>
+              <option value="Two year">Two year</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="PaperlessBilling">Paperless billing</label>
+            <select id="PaperlessBilling" required>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="eyebrow">Services</p>
+        <div class="grid-3">
+          <div class="field">
+            <label for="PhoneService">Phone service</label>
+            <select id="PhoneService" required>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="MultipleLines">Multiple lines</label>
+            <select id="MultipleLines" required>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+              <option value="No phone service">No phone service</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="InternetService">Internet service</label>
+            <select id="InternetService" required>
+              <option value="Fiber optic">Fiber optic</option>
+              <option value="DSL">DSL</option>
+              <option value="No">No</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="OnlineSecurity">Online security</label>
+            <select id="OnlineSecurity" required>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+              <option value="No internet service">No internet service</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="OnlineBackup">Online backup</label>
+            <select id="OnlineBackup" required>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+              <option value="No internet service">No internet service</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="DeviceProtection">Device protection</label>
+            <select id="DeviceProtection" required>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+              <option value="No internet service">No internet service</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="TechSupport">Tech support</label>
+            <select id="TechSupport" required>
+              <option value="No">No</option>
+              <option value="Yes">Yes</option>
+              <option value="No internet service">No internet service</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="StreamingTV">Streaming TV</label>
+            <select id="StreamingTV" required>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+              <option value="No internet service">No internet service</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="StreamingMovies">Streaming movies</label>
+            <select id="StreamingMovies" required>
+              <option value="Yes">Yes</option>
+              <option value="No">No</option>
+              <option value="No internet service">No internet service</option>
+            </select>
+          </div>
+        </div>
+      </div>
+
+      <div class="section">
+        <p class="eyebrow">Billing</p>
+        <div class="grid-3">
+          <div class="field">
+            <label for="PaymentMethod">Payment method</label>
+            <select id="PaymentMethod" required>
+              <option value="Electronic check">Electronic check</option>
+              <option value="Mailed check">Mailed check</option>
+              <option value="Bank transfer (automatic)">Bank transfer (automatic)</option>
+              <option value="Credit card (automatic)">Credit card (automatic)</option>
+            </select>
+          </div>
+          <div class="field">
+            <label for="MonthlyCharges">Monthly charges ($)</label>
+            <input type="number" id="MonthlyCharges" min="0" step="0.01" value="85.70" required>
+          </div>
+          <div class="field">
+            <label for="TotalCharges">Total charges ($)</label>
+            <input type="number" id="TotalCharges" min="0" step="0.01" value="171.40" required>
+          </div>
+        </div>
+      </div>
+
+      <div class="actions">
+        <button type="submit" id="assessBtn">Assess risk</button>
+        <span class="status-line" id="statusLine"></span>
+      </div>
+    </form>
+
+    <!-- METER -->
+    <div class="panel meter-panel">
+      <p class="eyebrow">Signal meter</p>
+
+      <div class="gauge-wrap">
+        <svg class="gauge" viewBox="0 0 240 150">
+          <path class="gauge-track" d="M20,130 A100,100 0 0 1 220,130" />
+          <path class="gauge-fill" id="gaugeFill" d="M20,130 A100,100 0 0 1 220,130" />
+        </svg>
+        <div class="gauge-readout">
+          <div class="readout-num" id="readoutNum">&mdash;</div>
+          <div class="readout-label" id="readoutLabel">Awaiting input</div>
+        </div>
+      </div>
+
+      <div class="legend">
+        <span><i style="background:var(--safe)"></i>Low</span>
+        <span><i style="background:var(--watch)"></i>Medium</span>
+        <span><i style="background:var(--alert)"></i>High</span>
+      </div>
+
+      <div class="recommend" id="recommend">
+        Fill in the customer's profile and press <strong>Assess risk</strong> to read their churn signal.
+      </div>
+    </div>
+
+  </div>
+
+  <footer>
+    Customer Churn Prediction System &middot; <a href="/docs">API reference</a>
+  </footer>
+
+</div>
+
+<script>
+  const form = document.getElementById('churnForm');
+  const btn = document.getElementById('assessBtn');
+  const statusLine = document.getElementById('statusLine');
+  const gaugeFill = document.getElementById('gaugeFill');
+  const readoutNum = document.getElementById('readoutNum');
+  const readoutLabel = document.getElementById('readoutLabel');
+  const recommend = document.getElementById('recommend');
+
+  const pathLength = gaugeFill.getTotalLength();
+  gaugeFill.style.strokeDasharray = pathLength;
+  gaugeFill.style.strokeDashoffset = pathLength;
+
+  function bandColor(p) {
+    if (p < 0.3) return getComputedStyle(document.documentElement).getPropertyValue('--safe').trim();
+    if (p < 0.6) return getComputedStyle(document.documentElement).getPropertyValue('--watch').trim();
+    return getComputedStyle(document.documentElement).getPropertyValue('--alert').trim();
+  }
+
+  function bandWord(p) {
+    if (p < 0.3) return 'Low signal';
+    if (p < 0.6) return 'Medium signal';
+    return 'High signal';
+  }
+
+  function recommendation(p, label) {
+    if (p < 0.3) {
+      return `<strong>Stable.</strong> No action needed — customer shows a low churn signal (${label}).`;
+    }
+    if (p < 0.6) {
+      return `<strong>Monitor.</strong> Some churn indicators present. A light retention touch (loyalty offer, plan review) is worthwhile.`;
+    }
+    return `<strong>Retention call recommended.</strong> Strong churn signal (${label}) — consider a targeted offer or contract incentive now.`;
+  }
+
+  form.addEventListener('submit', async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+    btn.textContent = 'Reading signal…';
+    statusLine.textContent = '';
+    statusLine.classList.remove('err');
+
+    const payload = {
+      gender: document.getElementById('gender').value,
+      SeniorCitizen: parseInt(document.getElementById('SeniorCitizen').value, 10),
+      Partner: document.getElementById('Partner').value,
+      Dependents: document.getElementById('Dependents').value,
+      tenure: parseInt(document.getElementById('tenure').value, 10),
+      PhoneService: document.getElementById('PhoneService').value,
+      MultipleLines: document.getElementById('MultipleLines').value,
+      InternetService: document.getElementById('InternetService').value,
+      OnlineSecurity: document.getElementById('OnlineSecurity').value,
+      OnlineBackup: document.getElementById('OnlineBackup').value,
+      DeviceProtection: document.getElementById('DeviceProtection').value,
+      TechSupport: document.getElementById('TechSupport').value,
+      StreamingTV: document.getElementById('StreamingTV').value,
+      StreamingMovies: document.getElementById('StreamingMovies').value,
+      Contract: document.getElementById('Contract').value,
+      PaperlessBilling: document.getElementById('PaperlessBilling').value,
+      PaymentMethod: document.getElementById('PaymentMethod').value,
+      MonthlyCharges: parseFloat(document.getElementById('MonthlyCharges').value),
+      TotalCharges: parseFloat(document.getElementById('TotalCharges').value),
+    };
+
+    try {
+      const res = await fetch('/predict', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload),
+      });
+
+      if (!res.ok) {
+        const errBody = await res.json().catch(() => ({}));
+        throw new Error(errBody.detail ? JSON.stringify(errBody.detail) : `Request failed (${res.status})`);
+      }
+
+      const data = await res.json();
+      const p = data.churn_probability;
+      const color = bandColor(p);
+
+      gaugeFill.style.stroke = color;
+      gaugeFill.style.strokeDashoffset = pathLength * (1 - p);
+
+      readoutNum.textContent = Math.round(p * 100) + '%';
+      readoutNum.style.color = color;
+      readoutLabel.textContent = bandWord(p);
+      readoutLabel.style.color = color;
+
+      recommend.innerHTML = recommendation(p, data.risk_label);
+      statusLine.textContent = 'Signal read at ' + new Date().toLocaleTimeString();
+
+    } catch (err) {
+      statusLine.textContent = 'Error: ' + err.message;
+      statusLine.classList.add('err');
+    } finally {
+      btn.disabled = false;
+      btn.textContent = 'Assess risk';
+    }
+  });
+</script>
+
+</body>
+</html>

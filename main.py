@@ -16,6 +16,7 @@ in the same directory:
 """
 
 from fastapi import FastAPI, HTTPException
+from fastapi.responses import FileResponse
 from pydantic import BaseModel, Field
 import pandas as pd
 import joblib
@@ -82,6 +83,12 @@ def load_artifacts():
 
 @app.get("/")
 def root():
+    """Serves the Churn Risk Console web UI."""
+    return FileResponse("index.html")
+
+
+@app.get("/api")
+def api_info():
     return {
         "message": "Customer Churn Prediction API is running.",
         "docs": "/docs",
